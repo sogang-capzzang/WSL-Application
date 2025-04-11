@@ -1,0 +1,27 @@
+# Dockerfile
+FROM ubuntu:20.04
+
+# 기본 패키지 설치
+RUN apt-get update && apt-get install -y \
+    python3.8 \
+    python3-pip \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# CozyVoice 소스 코드 복사 (가정: 소스 코드가 프로젝트 루트에 있음)
+COPY cozyvoice /app/cozyvoice
+
+# 종속성 설치
+RUN pip3 install torch torchaudio numpy scipy flask
+
+# Flask 서버 실행 스크립트
+COPY tts_server.py /app/tts_server.py
+
+# 포트 노출
+EXPOSE 8080
+
+# 서버 실행
+CMD ["python3", "tts_server.py"]
