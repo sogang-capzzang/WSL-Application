@@ -1,12 +1,14 @@
 package com.example.cosyvoice.util
 
 import android.util.Log
+import com.example.cosyvoice.BuildConfig
 import kotlinx.coroutines.*
 import okhttp3.*
 import java.io.*
 import java.util.concurrent.TimeUnit
 
-class TTSClient(private val serverUrl: String = "http://123.45.67.89:54321/inference_zero_shot") {
+class TTSClient {
+    private val serverUrl = BuildConfig.COSYVOICE2_SERVER_URL
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
