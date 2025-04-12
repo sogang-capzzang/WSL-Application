@@ -29,7 +29,7 @@ sdk.dir=/path/to/android-sdk
 
 
 ```
-GEMINI_API_KEY=your-api-key
+gemini.api.key=your-api-key
 ```
 
 5. assets 폴더 생성
