@@ -16,7 +16,7 @@ git clone https://github.com/sogang-capzzang/WSL-Application.git
 
 - File > Project Structure > SDKs로 이동
 - '+' 버튼 > Android SDK 선택
-- SDK가 없으면 Download 버튼으로 설치 (최소 API 21, 권장 34)
+- SDK가 없으면 Download 버튼으로 설치 (최소 API 24, 권장 34)
 
 4. local.properties 생성
 
