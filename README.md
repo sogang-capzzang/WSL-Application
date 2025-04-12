@@ -19,7 +19,8 @@ git clone https://github.com/sogang-capzzang/WSL-Application.git
 - SDK가 없으면 Download 버튼으로 설치 (최소 API 21, 권장 34)
 
 4. local.properties 생성
-루트 디렉토리에 local.properties 파일이 없으면 만들고 아래의 sdk 경로가 있는지 확인
+
+- 루트 디렉토리에 local.properties 파일이 없으면 만들고 아래의 sdk 경로가 있는지 확인
 
 ```
 sdk.dir=/path/to/android-sdk
