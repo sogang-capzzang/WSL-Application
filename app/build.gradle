@@ -20,6 +20,7 @@ android {
         def localProperties = new Properties()
         localProperties.load(project.rootProject.file('local.properties').newDataInputStream())
         buildConfigField "String", "GEMINI_API_KEY", "\"${localProperties.getProperty('gemini.api.key')}\""
+        buildConfigField "String", "COSYVOICE2_SERVER_URL", "\"${localProperties.getProperty('cosyvoice2.server.url')}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 

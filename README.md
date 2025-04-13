@@ -30,6 +30,7 @@ sdk.dir=/path/to/android-sdk
 
 ```
 gemini.api.key=your-api-key
+cosyvoice2.server.url=http://123.45.67.89:54321/inference_zero_shot
 ```
 
 5. assets 폴더 생성
