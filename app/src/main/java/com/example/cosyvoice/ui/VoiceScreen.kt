@@ -1,5 +1,6 @@
 package com.example.cosyvoice.ui
 
+import AudioUtils
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -23,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import com.example.cosyvoice.BuildConfig
-import com.example.cosyvoice.util.AudioUtils
 import com.example.cosyvoice.util.TTSClient
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
@@ -130,22 +130,24 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     // Gemini 응답 처리 및 CosyVoice2 서버로 전송
     LaunchedEffect(geminiResponse) {
         geminiResponse?.let { response ->
-            val requestStartTime = System.currentTimeMillis() // 요청 시작 시간 기록
+            val requestStartTime = System.currentTimeMillis()
             Log.d("VoiceScreen", "TTS 요청 시작: $requestStartTime")
-            ttsClient.requestTTS(response, person) { pcmData, isFirst, firstResponseTimestamp ->
-                if (pcmData != null) {
+
+            ttsClient.requestTTS(response, person) { pcmData, size, isFirst, firstResponseTimestamp ->
+                if (size > 0) {
                     viewModel.updateStatusMessage("TTS 데이터 수신 중... (${if (isFirst) "첫 번째" else "이어지는"} 데이터)")
                     if (isFirst && firstResponseTimestamp != null) {
                         val responseTime = firstResponseTimestamp - requestStartTime
                         Log.d("VoiceScreen", "TTS 요청부터 첫 번째 응답까지 걸린 시간: $responseTime ms")
                     }
-                    audioUtils.playPcmDataStream(pcmData, isFirst)
+                    audioUtils.playPcmDataStream(pcmData, size, isFirst, firstResponseTimestamp)
                 } else {
-                    // viewModel.updateStatusMessage("모든 TTS PCM 데이터 재생 완료")
+                    viewModel.updateStatusMessage("모든 TTS PCM 데이터 재생 완료")
                 }
             }
         }
     }
+
 
     // SpeechRecognizer 리스너 설정
     DisposableEffect(Unit) {
