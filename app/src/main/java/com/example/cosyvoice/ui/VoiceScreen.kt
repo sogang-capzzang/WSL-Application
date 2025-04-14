@@ -1,5 +1,6 @@
 package com.example.cosyvoice.ui
 
+import AudioUtils
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -23,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import com.example.cosyvoice.BuildConfig
-import com.example.cosyvoice.util.AudioUtils
 import com.example.cosyvoice.util.TTSClient
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
@@ -47,7 +47,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     val statusMessage by viewModel.statusMessage.collectAsState()
     val geminiResponse by viewModel.geminiResponse.collectAsState()
 
-    // SpeechRecognizer 초기화
     val speechRecognizer = remember {
         val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
         if (recognizer == null) {
@@ -60,7 +59,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     }
     var recognizedText by remember { mutableStateOf<String?>(null) }
 
-    // 권한 상태 관리
     var hasRecordPermission by remember { mutableStateOf(
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     ) }
@@ -77,7 +75,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
         Log.d("VoiceScreen", "초기 권한 상태 - hasRecordPermission: $hasRecordPermission, hasStoragePermission: $hasStoragePermission")
     }
 
-    // 권한 요청 런처
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -91,7 +88,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
         }
     }
 
-    // 권한 확인 및 요청
     LaunchedEffect(Unit) {
         if (!hasRecordPermission || !hasStoragePermission) {
             Log.d("VoiceScreen", "권한 요청 다이얼로그 표시 요청")
@@ -112,7 +108,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     // 설정 화면에서 돌아왔을 때 권한 상태 업데이트
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1000) // 1초마다 권한 상태 확인
+            delay(1000)
             val newRecordPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             val newStoragePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 true
@@ -130,24 +126,27 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     // Gemini 응답 처리 및 CosyVoice2 서버로 전송
     LaunchedEffect(geminiResponse) {
         geminiResponse?.let { response ->
-            val requestStartTime = System.currentTimeMillis() // 요청 시작 시간 기록
+            val requestStartTime = System.currentTimeMillis()
             Log.d("VoiceScreen", "TTS 요청 시작: $requestStartTime")
-            ttsClient.requestTTS(response, person) { pcmData, isFirst, firstResponseTimestamp ->
-                if (pcmData != null) {
+
+            var hasReceivedData by mutableStateOf(false)
+            ttsClient.requestTTS(response, person) { pcmData, size, isFirst, firstResponseTimestamp ->
+                if (size > 0) {
+                    hasReceivedData = true
                     viewModel.updateStatusMessage("TTS 데이터 수신 중... (${if (isFirst) "첫 번째" else "이어지는"} 데이터)")
                     if (isFirst && firstResponseTimestamp != null) {
                         val responseTime = firstResponseTimestamp - requestStartTime
                         Log.d("VoiceScreen", "TTS 요청부터 첫 번째 응답까지 걸린 시간: $responseTime ms")
                     }
-                    audioUtils.playPcmDataStream(pcmData, isFirst)
-                } else {
-                    // viewModel.updateStatusMessage("모든 TTS PCM 데이터 재생 완료")
+                    audioUtils.playPcmDataStream(pcmData, size, isFirst, firstResponseTimestamp)
+                } else if (hasReceivedData) {
+                    viewModel.updateStatusMessage("모든 TTS 데이터 재생 완료")
                 }
             }
         }
     }
 
-    // SpeechRecognizer 리스너 설정
+
     DisposableEffect(Unit) {
         val listener = object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
@@ -274,7 +273,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                 Text(if (isRecording) "음성 인식 중지" else "음성 인식 시작")
             }
 
-            // 권한이 거부된 경우 설정 화면으로 이동 버튼
             if (!hasRecordPermission || !hasStoragePermission) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
@@ -292,9 +290,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
 
         Button(
             onClick = { navController.popBackStack() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
+            modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
             Text("뒤로가기")
         }
@@ -366,113 +362,85 @@ class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
 
         val systemPrompt = """
             당신은 어르신을 돌보는 AI agent이에요. 어르신에게 보호자의 목소리로 따뜻하고 배려 깊은 말투로 대화해야 해요. 
-            항상 ~해요체를 사용해서 정중하고 친근하게 말해주세요. 진짜 대화하듯이 자연스럽게 말하고, 어르신의 말에 적절히 반응해주세요. 
-            답변은 3문장정도로 간결하게 말해주세요.예를 들어, 어르신, ~하세요. 또는 어르신, 밥은 잘 드셔야해요. 같은 말투를 사용하는데, 절대 의문문은 쓰지말고 평서문으로만 대답하세요.
-            지금까지의 말에 대한 답변은 하지말고 무주건 사용자 : 이후에 나오는 말에만 답변하세요.
+            항상 ~해요체를 사용해서 정중하고 친근하게 말해주세요. 답변은 3문장만 간결하게 말해주세요.
+            예를 들어, 어르신, ~하세요. 또는 어르신, 밥은 잘 드셔야해요. 같은 말투를 사용하세요. 절대 의문문은 쓰지 말고 평서문으로만 대답하세요.
+            지금까지의 말에 대한 답변은 하지 말고 무조건 앞으로 나올 사용자: 이후에 나오는 말에만 답변하세요.
+            사용자: $userInput
         """.trimIndent()
-        val fullPrompt = "$systemPrompt 사용자: $userInput"
-        Log.d("VoiceScreen", "전송할 프롬프트: $fullPrompt")
+        Log.d("VoiceScreen", "전송할 프롬프트: $systemPrompt")
 
-        // 문장이 끊기지 않도록 재시도 로직
-        var finalContent = ""
-        var attempt = 0
-        val maxAttempts = 2
-
-        while (attempt < maxAttempts) {
-            val requestBody = """
-                {
-                    "contents": [
-                        {
-                            "parts": [
-                                {
-                                    "text": "$fullPrompt${if (finalContent.isNotEmpty()) "\n이어 말해주세요: $finalContent" else ""}"
-                                }
-                            ]
-                        }
-                    ],
-                    "generationConfig": {
-                        "maxOutputTokens": 60,
-                        "temperature": 0.5,
-                        "topP": 0.9
+        val requestBody = """
+            {
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "text": "$systemPrompt"
+                            }
+                        ]
                     }
+                ],
+                "generationConfig": {
+                    "temperature": 0.5,
+                    "topP": 0.9
                 }
-            """.trimIndent()
-
-            Log.d("VoiceScreen", "Gemini API 요청: $requestBody")
-
-            // HTTP 요청
-            val request = Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey")
-                .addHeader("Content-Type", "application/json")
-                .post(requestBody.toRequestBody("application/json".toMediaType()))
-                .build()
-
-            try {
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        val errorBody = response.body?.string() ?: "응답 본문 없음"
-                        Log.e("VoiceScreen", "Gemini API 요청 실패: ${response.code}, ${response.message}")
-                        Log.e("VoiceScreen", "오류 응답 본문: $errorBody")
-                        return null
-                    }
-                    val responseBody = response.body?.string()
-                    Log.d("VoiceScreen", "Gemini API 응답: $responseBody")
-
-                    // JSON 파싱
-                    val json = JSONObject(responseBody)
-                    val candidates = json.getJSONArray("candidates")
-                    if (candidates.length() == 0) {
-                        Log.e("VoiceScreen", "Gemini API 응답에 candidates가 없음")
-                        return null
-                    }
-                    val firstCandidate = candidates.getJSONObject(0)
-                    val content = firstCandidate.getJSONObject("content")
-                    val parts = content.getJSONArray("parts")
-                    if (parts.length() == 0) {
-                        Log.e("VoiceScreen", "Gemini API 응답에 parts가 없음")
-                        return null
-                    }
-                    val text = parts.getJSONObject(0).getString("text")
-                    val finishReason = firstCandidate.getString("finishReason")
-
-                    // 토큰 사용량 로그
-                    val usageMetadata = json.optJSONObject("usageMetadata")
-                    if (usageMetadata != null) {
-                        val promptTokens = usageMetadata.getInt("promptTokenCount")
-                        val candidatesTokens = usageMetadata.getInt("candidatesTokenCount")
-                        val totalTokens = usageMetadata.getInt("totalTokenCount")
-                        Log.d("VoiceScreen", "토큰 사용량 - Prompt: $promptTokens, Candidates: $candidatesTokens, Total: $totalTokens")
-                    }
-                    finalContent += text
-
-                    // 문장이 끊겼는지 확인
-                    when (finishReason) {
-                        "STOP" -> {
-                            // 문장이 완성됨
-                            return finalContent
-                        }
-                        "MAX_TOKENS" -> {
-                            attempt++
-                            Log.d("VoiceScreen", "문장이 끊김, 재시도: $attempt")
-                        }
-                        else -> {
-                            Log.e("VoiceScreen", "알 수 없는 finishReason: $finishReason")
-                            return null
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("VoiceScreen", "Gemini API 호출 중 오류: ${e.message}", e)
-                return null
             }
-        }
+        """.trimIndent()
 
-        // 최대 재시도 후에도 문장이 완성되지 않음
-        return if (finalContent.isNotEmpty()) {
-            finalContent
-        } else {
-            Log.e("VoiceScreen", "최대 재시도 후에도 문장 완성 실패")
-            null
+        Log.d("VoiceScreen", "Gemini API 요청: $requestBody")
+
+        val request = Request.Builder()
+            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(requestBody.toRequestBody("application/json".toMediaType()))
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body?.string() ?: "응답 본문 없음"
+                    Log.e("VoiceScreen", "Gemini API 요청 실패: ${response.code}, ${response.message}")
+                    Log.e("VoiceScreen", "오류 응답 본문: $errorBody")
+                    return null
+                }
+                val responseBody = response.body?.string()
+                Log.d("VoiceScreen", "Gemini API 응답: $responseBody")
+
+                val json = JSONObject(responseBody)
+                val candidates = json.getJSONArray("candidates")
+                if (candidates.length() == 0) {
+                    Log.e("VoiceScreen", "Gemini API 응답에 candidates가 없음")
+                    return null
+                }
+                val firstCandidate = candidates.getJSONObject(0)
+                val content = firstCandidate.getJSONObject("content")
+                val parts = content.getJSONArray("parts")
+                if (parts.length() == 0) {
+                    Log.e("VoiceScreen", "Gemini API 응답에 parts가 없음")
+                    return null
+                }
+                val text = parts.getJSONObject(0).getString("text")
+
+                // 토큰 사용량 로그
+                val usageMetadata = json.optJSONObject("usageMetadata")
+                if (usageMetadata != null) {
+                    val promptTokens = usageMetadata.getInt("promptTokenCount")
+                    val candidatesTokens = usageMetadata.getInt("candidatesTokenCount")
+                    val totalTokens = usageMetadata.getInt("totalTokenCount")
+                    Log.d("VoiceScreen", "토큰 사용량 - Prompt: $promptTokens, Candidates: $candidatesTokens, Total: $totalTokens")
+                }
+
+                // 응답 검증
+                if (text.contains("사용자: ")) {
+                    Log.e("VoiceScreen", "응답에 '사용자: ' 포함: $text")
+                    return null
+                }
+
+                return text
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceScreen", "Gemini API 호출 중 오류: ${e.message}", e)
+            return null
         }
     }
 }

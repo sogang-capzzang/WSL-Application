@@ -5,19 +5,21 @@ import com.example.cosyvoice.BuildConfig
 import kotlinx.coroutines.*
 import okhttp3.*
 import java.io.*
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 
 class TTSClient {
     private val serverUrl = BuildConfig.COSYVOICE2_SERVER_URL
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .build()
+    private var currentCall: Call? = null
 
     suspend fun requestTTS(
         inputText: String,
         person: String,
-        onPcmReceived: (ByteArray?, Boolean, Long?) -> Unit
+        onPcmReceived: (ByteArray, Int, Boolean, Long?) -> Unit
     ) = coroutineScope {
         try {
             val requestBody = FormBody.Builder()
@@ -30,64 +32,49 @@ class TTSClient {
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).execute().use { response ->
+            currentCall = client.newCall(request)
+            currentCall?.execute()?.use { response ->
                 if (!response.isSuccessful) {
-                    Log.e("TTSClient", "TTS request failed: ${response.code}, ${response.message}")
-                    launch(Dispatchers.Main) {
-                        onPcmReceived(null, false, null)
-                    }
+                    Log.e("TTSClient", "TTS request failed: ${response.code}")
+                    launch(Dispatchers.Main) { onPcmReceived(ByteArray(0), 0, false, null) }
                     return@coroutineScope
                 }
 
                 var isFirst = true
-                var currentPcmData = ByteArrayOutputStream()
-                var firstResponseTimestamp: Long? = null // 첫 번째 응답 시점
+
+                var firstResponseTimestamp: Long? = null
+                val buffer = ByteArray(8192)
 
                 response.body?.byteStream()?.use { inputStream ->
-                    val buffer = ByteArray(8192)
                     var bytesRead: Int
-
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         if (bytesRead > 0) {
-                            currentPcmData.write(buffer, 0, bytesRead)
-                            val pcmData = currentPcmData.toByteArray()
-                            currentPcmData.reset() // 다음 청크를 위해 버퍼 초기화
-
-                            if (pcmData.isNotEmpty()) {
-                                Log.d("TTSClient", "Received PCM data: ${pcmData.size} bytes")
-
-                                if (isFirst) {
-                                    firstResponseTimestamp = System.currentTimeMillis()
-                                    Log.d("TTSClient", "First PCM response timestamp: $firstResponseTimestamp")
-                                }
-
-                                launch(Dispatchers.Main) {
-                                    onPcmReceived(pcmData, isFirst, if (isFirst) firstResponseTimestamp else null)
-                                }
-                                isFirst = false
+                            if (isFirst) {
+                                firstResponseTimestamp = System.currentTimeMillis()
                             }
+                            // 덮어씌움 방지
+                            withContext(Dispatchers.IO) {
+                                onPcmReceived(buffer, bytesRead, isFirst, if (isFirst) firstResponseTimestamp else null)
+                            }
+                            isFirst = false
                         }
                     }
-
-                    // 스트리밍 종료 시 마지막 데이터 처리
-                    val lastPcmData = currentPcmData.toByteArray()
-                    if (lastPcmData.isNotEmpty()) {
-                        Log.d("TTSClient", "Received last PCM data: ${lastPcmData.size} bytes")
-                        launch(Dispatchers.Main) {
-                            onPcmReceived(lastPcmData, isFirst, null)
-                        }
-                    }
-
                     launch(Dispatchers.Main) {
-                        onPcmReceived(null, false, null)
+                        onPcmReceived(ByteArray(0), 0, false, null)
                     }
                 }
             }
+        } catch (e: SocketTimeoutException) {
+            Log.e("TTSClient", "Network timeout: ${e.message}", e)
+            launch(Dispatchers.Main) { onPcmReceived(ByteArray(0), 0, false, null) }
+        } catch (e: IOException) {
+            Log.e("TTSClient", "Network error: ${e.message}", e)
+            launch(Dispatchers.Main) { onPcmReceived(ByteArray(0), 0, false, null) }
         } catch (e: Exception) {
-            Log.e("TTSClient", "Error requesting TTS: ${e.message}", e)
-            launch(Dispatchers.Main) {
-                onPcmReceived(null, false, null)
-            }
+            Log.e("TTSClient", "Unexpected error: ${e.message}", e)
+            launch(Dispatchers.Main) { onPcmReceived(ByteArray(0), 0, false, null) }
+        } finally {
+            currentCall = null
         }
     }
 }
