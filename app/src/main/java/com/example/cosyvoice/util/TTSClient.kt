@@ -7,6 +7,7 @@ import okhttp3.*
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
 
 class TTSClient {
     private val serverUrl = BuildConfig.COSYVOICE2_SERVER_URL
@@ -22,6 +23,12 @@ class TTSClient {
         onPcmReceived: (ByteArray, Int, Boolean, Long?) -> Unit
     ) = coroutineScope {
         var response: Response? = null
+        val chunkSize = 3200 // 0.1초 (16000Hz * 0.1 * 2바이트)
+        val tempBuffer = mutableListOf<ByteArray>()
+        var tempBufferSize = 0
+        var isFirst = true
+        var firstResponseTimestamp: Long? = null
+
         try {
             val requestBody = FormBody.Builder()
                 .add("tts_text", inputText)
@@ -45,10 +52,7 @@ class TTSClient {
                 return@coroutineScope
             }
 
-            var isFirst = true
-            var firstResponseTimestamp: Long? = null
             val buffer = ByteArray(8192)
-
             withContext(Dispatchers.IO) {
                 response.body?.byteStream()?.use { inputStream ->
                     var bytesRead: Int
@@ -64,10 +68,44 @@ class TTSClient {
                             if (isFirst) {
                                 firstResponseTimestamp = System.currentTimeMillis()
                             }
-                            val pcmData = buffer.copyOf(bytesRead)
-                            onPcmReceived(pcmData, bytesRead, isFirst, if (isFirst) firstResponseTimestamp else null)
-                            isFirst = false
+                            tempBuffer.add(buffer.copyOf(bytesRead))
+                            tempBufferSize += bytesRead
+                            Log.d("TTSClient", "Received PCM: $bytesRead bytes, total: $tempBufferSize")
+
+                            // 고정 크기 청크로 데이터 전송
+                            while (tempBufferSize >= chunkSize) {
+                                val chunk = ByteArray(chunkSize)
+                                var filled = 0
+                                while (filled < chunkSize && tempBuffer.isNotEmpty()) {
+                                    val current = tempBuffer[0]
+                                    val toCopy = min(chunkSize - filled, current.size)
+                                    System.arraycopy(current, 0, chunk, filled, toCopy)
+                                    filled += toCopy
+                                    if (toCopy < current.size) {
+                                        val remaining = current.copyOfRange(toCopy, current.size)
+                                        tempBuffer[0] = remaining
+                                    } else {
+                                        tempBuffer.removeAt(0)
+                                    }
+                                    tempBufferSize -= toCopy
+                                }
+                                onPcmReceived(chunk, chunkSize, isFirst, if (isFirst) firstResponseTimestamp else null)
+                                isFirst = false
+                            }
                         }
+                    }
+                    // 남은 데이터 전송
+                    if (tempBufferSize > 0) {
+                        val finalChunk = ByteArray(tempBufferSize)
+                        var filled = 0
+                        while (tempBuffer.isNotEmpty()) {
+                            val current = tempBuffer[0]
+                            System.arraycopy(current, 0, finalChunk, filled, current.size)
+                            filled += current.size
+                            tempBuffer.removeAt(0)
+                        }
+                        onPcmReceived(finalChunk, tempBufferSize, isFirst, if (isFirst) firstResponseTimestamp else null)
+                        tempBufferSize = 0
                     }
                     onPcmReceived(ByteArray(0), 0, false, null)
                 } ?: run {
