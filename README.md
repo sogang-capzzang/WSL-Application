@@ -33,42 +33,5 @@ gemini.api.key=your-api-key
 cosyvoice2.server.url=http://123.45.67.89:54321/inference_zero_shot
 ```
 
-5. assets 폴더 생성
-app/src/main/assets/에 아래 구조로 디렉토리와 파일을 추가
 
-
-
-
-```
-app/src/main/assets/
-├── person/
-│   ├── woon.jpg
-│   ├── minjoon.jpg
-│   └── gyeongyeon.png
-├── exercise/
-│   ├── woon/
-│   │   ├── exercise1.mp4
-│   │   ├── exercise2.mp4
-│   │   └── exercise3.mp4
-│   ├── minjoon/
-│   │   ├── exercise1.mp4
-│   │   ├── exercise2.mp4
-│   │   └── exercise3.mp4
-│   └── gyeongyeon/
-│       ├── exercise1.mp4
-│       ├── exercise2.mp4
-│       └── exercise3.mp4
-└── lipsync/
-    ├── woon/
-    │   ├── lipsync1.mp4
-    │   ├── lipsync2.mp4
-    │   └── lipsync3.mp4
-    ├── minjoon/
-    │   ├── lipsync1.mp4
-    │   ├── lipsync2.mp4
-    │   └── lipsync3.mp4
-    └── gyeongyeon/
-        ├── lipsync1.mp4
-        ├── lipsync2.mp4
-        └── lipsync3.mp4
 ```
