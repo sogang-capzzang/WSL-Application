@@ -1,6 +1,7 @@
 package com.example.cosyvoice.viewmodel
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -11,34 +12,45 @@ import kotlinx.coroutines.launch
 
 class VideoViewModel : ViewModel() {
     val videos = mutableStateListOf<Video>()
-    val selectedCategory = mutableStateOf("exercise")
+    val selectedCategory = mutableStateOf("meal")
     val searchQuery = mutableStateOf("")
 
-    fun loadVideos(context: Context) {
+    fun loadVideos(context: Context, person: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            Log.d("VideoViewModel", "Loading videos for person: $person")
             val assetManager = context.assets
-            val exerciseFiles = assetManager.list("exercise")?.filter { it.endsWith(".mp4") } ?: emptyList()
-            val lipSyncFiles = assetManager.list("lipsync")?.filter { it.endsWith(".mp4") } ?: emptyList()
+            val categories = listOf("exercise", "meal", "medication")
 
-            val exerciseVideos = exerciseFiles.map { file ->
-                Video(
-                    id = file,
-                    title = file.replace(".mp4", ""),
-                    path = "exercise/$file",
-                    category = "exercise"
-                )
-            }
-            val lipSyncVideos = lipSyncFiles.map { file ->
-                Video(
-                    id = file,
-                    title = file.replace(".mp4", ""),
-                    path = "lipsync/$file",
-                    category = "lipsync"
-                )
+            val allVideos = mutableListOf<Video>()
+            categories.forEach { category ->
+                try {
+                    val files = assetManager.list("$category/$person")?.filter {
+                        it.endsWith(".mp4", ignoreCase = true) || it.endsWith(".avi", ignoreCase = true)
+                    } ?: emptyList()
+                    Log.d("VideoViewModel", "Category: $category, Found ${files.size} files for $person: $files")
+
+                    val categoryVideos = files.map { file ->
+                        val path = "$category/$person/$file"
+                        Video(
+                            id = file,
+                            title = file.replace(".mp4", "").replace(".avi", ""),
+                            path = path,
+                            category = category
+                        )
+                    }
+                    allVideos.addAll(categoryVideos)
+                } catch (e: Exception) {
+                    Log.e("VideoViewModel", "Error loading files for category $category and person $person: ${e.message}")
+                }
             }
 
+            Log.d("VideoViewModel", "Total videos loaded: ${allVideos.size}, Paths: ${allVideos.map { it.path }}")
             videos.clear()
-            videos.addAll(exerciseVideos + lipSyncVideos)
+            videos.addAll(allVideos)
+
+            if (allVideos.isEmpty()) {
+                Log.w("VideoViewModel", "No videos found for person: $person. Check assets folder structure.")
+            }
         }
     }
 
@@ -51,8 +63,10 @@ class VideoViewModel : ViewModel() {
 
     fun getFilteredVideos(): List<Video> {
         val query = searchQuery.value.lowercase()
-        return videos.filter { video ->
+        val filtered = videos.filter { video ->
             video.category == selectedCategory.value && video.title.lowercase().contains(query)
         }
+        Log.d("VideoViewModel", "Filtered videos: ${filtered.size}, Category: ${selectedCategory.value}, Query: $query, Paths: ${filtered.map { it.path }}")
+        return filtered
     }
 }

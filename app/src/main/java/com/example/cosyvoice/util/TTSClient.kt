@@ -23,7 +23,7 @@ class TTSClient {
         onPcmReceived: (ByteArray, Int, Boolean, Long?) -> Unit
     ) = coroutineScope {
         var response: Response? = null
-        val chunkSize = 3200 // 0.1초 (16000Hz * 0.1 * 2바이트)
+        val chunkSize = 3200
         val tempBuffer = mutableListOf<ByteArray>()
         var tempBufferSize = 0
         var isFirst = true
@@ -32,7 +32,7 @@ class TTSClient {
         try {
             val requestBody = FormBody.Builder()
                 .add("tts_text", inputText)
-                .add("person", person)
+                .add("meal", person)
                 .build()
 
             val request = Request.Builder()
@@ -94,7 +94,6 @@ class TTSClient {
                             }
                         }
                     }
-                    // 남은 데이터 전송
                     if (tempBufferSize > 0) {
                         val finalChunk = ByteArray(tempBufferSize)
                         var filled = 0

@@ -104,8 +104,8 @@ class AudioUtils(private val context: Context) {
         try {
             audioTrack?.let { track ->
                 if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                    track.flush() // 버퍼에 남은 것 재생
-                    Thread.sleep(50) // 살짝 기다리기
+                    track.flush()
+                    Thread.sleep(50)
                     track.stop()
                 }
                 track.release()
