@@ -14,27 +14,45 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import com.example.cosyvoice.BuildConfig
 import com.example.cosyvoice.util.TTSClient
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.style.TextAlign
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceScreen(navController: NavHostController, person: String) {
     val context = LocalContext.current
@@ -64,13 +82,12 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     ) }
     var hasStoragePermission by remember { mutableStateOf(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            true // Android 13 이상에서는 WRITE_EXTERNAL_STORAGE 불필요
+            true
         } else {
             ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
     ) }
 
-    // 초기 권한 상태 로그
     LaunchedEffect(Unit) {
         Log.d("VoiceScreen", "초기 권한 상태 - hasRecordPermission: $hasRecordPermission, hasStoragePermission: $hasStoragePermission")
     }
@@ -105,7 +122,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
         }
     }
 
-    // 설정 화면에서 돌아왔을 때 권한 상태 업데이트
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
@@ -113,7 +129,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
             val newStoragePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 true
             } else {
-                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(context,Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
             }
             if (hasRecordPermission != newRecordPermission || hasStoragePermission != newStoragePermission) {
                 hasRecordPermission = newRecordPermission
@@ -123,7 +139,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
         }
     }
 
-    // Gemini 응답 처리 및 CosyVoice2 서버로 전송
     LaunchedEffect(geminiResponse) {
         geminiResponse?.let { response ->
             val requestStartTime = System.currentTimeMillis()
@@ -145,7 +160,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
             }
         }
     }
-
 
     DisposableEffect(Unit) {
         val listener = object : RecognitionListener {
@@ -195,7 +209,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                 Log.d("VoiceScreen", "음성 인식 결과: $recognizedText")
                 if (recognizedText != null) {
                     viewModel.updateStatusMessage("STT 완료: $recognizedText")
-                    // Gemini API 호출
                     viewModel.callGeminiApi(recognizedText!!)
                 }
                 isRecording = false
@@ -218,85 +231,190 @@ fun VoiceScreen(navController: NavHostController, person: String) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(statusMessage, style = MaterialTheme.typography.bodyLarge)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    if (!hasRecordPermission || !hasStoragePermission) {
-                        viewModel.updateStatusMessage("권한이 필요합니다. 설정에서 권한을 허용해주세요.")
-                        val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            arrayOf(Manifest.permission.RECORD_AUDIO)
-                        } else {
-                            arrayOf(
-                                Manifest.permission.RECORD_AUDIO,
-                                Manifest.permission.WRITE_EXTERNAL_STORAGE
-                            )
-                        }
-                        permissionLauncher.launch(permissionsToRequest)
-                        return@Button
-                    }
-
-                    if (!isRecording) {
-                        viewModel.updateStatusMessage("음성 인식 중...")
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
-                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
-                            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                        }
-                        speechRecognizer.startListening(intent)
-                        Log.d("VoiceScreen", "음성 인식 시작 요청")
-                    } else {
-                        viewModel.updateStatusMessage("음성 인식 중지...")
-                        speechRecognizer.stopListening()
-                        Log.d("VoiceScreen", "음성 인식 중지 요청")
-                    }
-                    isRecording = !isRecording
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "음성 대화",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
                 },
-                enabled = hasRecordPermission && hasStoragePermission
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "뒤로가기",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+                )
+            )
+        },
+        modifier = Modifier.fillMaxSize()
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                Text(if (isRecording) "음성 인식 중지" else "음성 인식 시작")
-            }
+                // 상태 메시지
+                AnimatedVisibility(
+                    visible = statusMessage.isNotEmpty(),
+                    enter = fadeIn(tween(500)),
+                    exit = fadeOut(tween(500))
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp)
+                            .shadow(8.dp, RoundedCornerShape(16.dp)),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(
+                            text = statusMessage,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier
+                                .padding(16.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
 
-            if (!hasRecordPermission || !hasStoragePermission) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 음성 인식 버튼
                 Button(
                     onClick = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
+                        if (!hasRecordPermission || !hasStoragePermission) {
+                            viewModel.updateStatusMessage("권한이 필요합니다. 설정에서 권한을 허용해주세요.")
+                            val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                arrayOf(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                arrayOf(
+                                    Manifest.permission.RECORD_AUDIO,
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                )
+                            }
+                            permissionLauncher.launch(permissionsToRequest)
+                            return@Button
                         }
-                        context.startActivity(intent)
-                    }
+
+                        if (!isRecording) {
+                            viewModel.updateStatusMessage("음성 인식 중...")
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+                                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
+                                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                            }
+                            speechRecognizer.startListening(intent)
+                            Log.d("VoiceScreen", "음성 인식 시작 요청")
+                        } else {
+                            viewModel.updateStatusMessage("음성 인식 중지...")
+                            speechRecognizer.stopListening()
+                            Log.d("VoiceScreen", "음성 인식 중지 요청")
+                        }
+                        isRecording = !isRecording
+                    },
+                    enabled = hasRecordPermission && hasStoragePermission,
+                    modifier = Modifier
+                        .size(130.dp)
+                        .shadow(12.dp, RoundedCornerShape(60.dp)),
+                    shape = RoundedCornerShape(60.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("설정으로 이동")
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                ),
+                                shape = RoundedCornerShape(100.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isRecording) Icons.Default.MicOff else Icons.Default.Mic,
+                            contentDescription = if (isRecording) "음성 인식 중지" else "음성 인식 시작",
+                            modifier = Modifier.size(80.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 권한 설정 버튼
+                AnimatedVisibility(
+                    visible = !hasRecordPermission || !hasStoragePermission,
+                    enter = fadeIn(tween(500)),
+                    exit = fadeOut(tween(500))
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            "설정으로 이동",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
                 }
             }
         }
-
-        Button(
-            onClick = { navController.popBackStack() },
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text("뒤로가기")
-        }
     }
 
-    // 컴포넌트 종료 시 리소스 해제
     DisposableEffect(Unit) {
         onDispose {
             audioUtils.release()
@@ -305,7 +423,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     }
 }
 
-// ViewModel 클래스 정의
 class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
     private val _statusMessage = MutableStateFlow("대기 중...")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
@@ -334,7 +451,6 @@ class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
         }
     }
 
-    // 마지막 요청 시간
     private var lastRequestTime = 0L
 
     private suspend fun callGeminiApiInternal(userInput: String): String? {
@@ -351,7 +467,6 @@ class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
             .retryOnConnectionFailure(false)
             .build()
 
-        // 요청 간 딜레이 (최소 1초)
         val currentTime = System.currentTimeMillis()
         val timeSinceLastRequest = currentTime - lastRequestTime
         if (timeSinceLastRequest < 1000) {
@@ -421,7 +536,6 @@ class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
                 }
                 val text = parts.getJSONObject(0).getString("text")
 
-                // 토큰 사용량 로그
                 val usageMetadata = json.optJSONObject("usageMetadata")
                 if (usageMetadata != null) {
                     val promptTokens = usageMetadata.getInt("promptTokenCount")
@@ -430,7 +544,6 @@ class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
                     Log.d("VoiceScreen", "토큰 사용량 - Prompt: $promptTokens, Candidates: $candidatesTokens, Total: $totalTokens")
                 }
 
-                // 응답 검증
                 if (text.contains("사용자: ")) {
                     Log.e("VoiceScreen", "응답에 '사용자: ' 포함: $text")
                     return null

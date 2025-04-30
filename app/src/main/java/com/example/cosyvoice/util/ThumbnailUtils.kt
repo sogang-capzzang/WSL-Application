@@ -4,57 +4,55 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.util.Log
-import java.io.File
-import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.IOException
 
 object ThumbnailUtils {
-    private val thumbnailCache = mutableMapOf<String, Bitmap?>()
+    suspend fun getThumbnailFromAsset(context: Context, assetPath: String): Bitmap? {
+        return withContext(Dispatchers.IO) {
+            var retriever: MediaMetadataRetriever? = null
+            try {
+                retriever = MediaMetadataRetriever()
+                Log.d("ThumbnailUtils", "Attempting to open asset: $assetPath")
+                context.assets.openFd(assetPath).use { assetFileDescriptor ->
+                    retriever.setDataSource(
+                        assetFileDescriptor.fileDescriptor,
+                        assetFileDescriptor.startOffset,
+                        assetFileDescriptor.length
+                    )
 
-    fun getThumbnailFromAsset(context: Context, assetPath: String): Bitmap? {
-        // 메모리 캐시 확인
-        if (thumbnailCache.containsKey(assetPath)) {
-            Log.d("ThumbnailUtils", "Loaded thumbnail from memory cache: $assetPath")
-            return thumbnailCache[assetPath]
-        }
+                    val durationString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    val duration = durationString?.toLongOrNull() ?: 0L
+                    val thumbnailTime = if (duration > 0) duration / 2 else 1000L
 
-        val retriever = MediaMetadataRetriever()
-        return try {
-            val assetManager = context.assets
-            val fileList = assetManager.list(assetPath.substringBeforeLast("/")) ?: emptyArray()
-            if (!fileList.contains(assetPath.substringAfterLast("/"))) {
-                Log.e("ThumbnailUtils", "File does not exist in assets: $assetPath")
-                return null
-            }
-            Log.d("ThumbnailUtils", "File exists in assets: $assetPath")
+                    Log.d("ThumbnailUtils", "Asset: $assetPath, Duration: $duration ms, ThumbnailTime: $thumbnailTime ms")
 
-            // assets 파일을 임시 파일로 복사
-            val tempFile = File.createTempFile("thumbnail", ".mp4", context.cacheDir)
-            context.assets.open(assetPath).use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
+                    val bitmap = retriever.getFrameAtTime(
+                        thumbnailTime * 1000,
+                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                    )
+                    if (bitmap == null) {
+                        Log.e("ThumbnailUtils", "Failed to extract thumbnail for $assetPath: Bitmap is null")
+                    } else {
+                        Log.d("ThumbnailUtils", "Thumbnail extracted successfully for $assetPath")
+                    }
+                    bitmap
+                }
+            } catch (e: IOException) {
+                Log.e("ThumbnailUtils", "IOException extracting thumbnail for $assetPath: ${e.message}")
+                null
+            } catch (e: Exception) {
+                Log.e("ThumbnailUtils", "General error extracting thumbnail for $assetPath: ${e.message}")
+                null
+            } finally {
+                try {
+                    retriever?.release()
+                    Log.d("ThumbnailUtils", "MediaMetadataRetriever released for $assetPath")
+                } catch (e: Exception) {
+                    Log.e("ThumbnailUtils", "Error releasing MediaMetadataRetriever: ${e.message}")
                 }
             }
-            Log.d("ThumbnailUtils", "Copied asset to temp file: ${tempFile.absolutePath}")
-
-            // 임시 파일에서 썸네일 추출
-            retriever.setDataSource(tempFile.absolutePath)
-            val bitmap = retriever.getFrameAtTime(0)
-            if (bitmap == null) {
-                Log.e("ThumbnailUtils", "Failed to extract thumbnail from $assetPath: Bitmap is null")
-                return null
-            }
-            val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 300, (300 * bitmap.height / bitmap.width), true)
-            thumbnailCache[assetPath] = scaledBitmap
-            Log.d("ThumbnailUtils", "Thumbnail loaded successfully: $assetPath")
-
-            //임시 파일 삭제
-            tempFile.delete()
-            scaledBitmap
-        } catch (e: Exception) {
-            Log.e("ThumbnailUtils", "Error loading thumbnail for $assetPath: ${e.message}", e)
-            null
-        } finally {
-            retriever.release()
         }
     }
 }
