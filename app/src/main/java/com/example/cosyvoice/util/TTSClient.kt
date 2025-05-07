@@ -32,7 +32,7 @@ class TTSClient {
         try {
             val requestBody = FormBody.Builder()
                 .add("tts_text", inputText)
-                .add("meal", person)
+                .add("person", person)
                 .build()
 
             val request = Request.Builder()
