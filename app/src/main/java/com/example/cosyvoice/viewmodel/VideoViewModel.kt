@@ -12,14 +12,14 @@ import kotlinx.coroutines.launch
 
 class VideoViewModel : ViewModel() {
     val videos = mutableStateListOf<Video>()
-    val selectedCategory = mutableStateOf("meal")
+    val selectedCategory = mutableStateOf("meal") // Default for LipSyncScreen
     val searchQuery = mutableStateOf("")
 
     fun loadVideos(context: Context, person: String) {
         viewModelScope.launch(Dispatchers.IO) {
             Log.d("VideoViewModel", "Loading videos for person: $person")
             val assetManager = context.assets
-            val categories = listOf("exercise", "meal", "medication")
+            val categories = listOf("gymnastics", "exercise", "meal", "medication")
 
             val allVideos = mutableListOf<Video>()
             categories.forEach { category ->

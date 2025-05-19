@@ -92,7 +92,7 @@ fun MainScreen() {
                                 .clickable { selectedPerson = person }
                                 .padding(8.dp)
                         ) {
-                            val extension =  "jpg"
+                            val extension = "jpg"
                             val painter = rememberAsyncImagePainter("file:///android_asset/person/$person.$extension")
 
                             val itemWidth = (screenWidth - 48.dp) / 3
@@ -111,7 +111,7 @@ fun MainScreen() {
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp)) //
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
                                 text = person.replaceFirstChar { it.uppercase() },
@@ -121,7 +121,6 @@ fun MainScreen() {
                         }
                     }
                 }
-
             } else {
                 NavHost(navController = navController, startDestination = "home") {
                     composable("home") {
@@ -130,7 +129,6 @@ fun MainScreen() {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            // ✅ 버튼 간격 조정 및 동그라미 형태 적용
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -149,6 +147,12 @@ fun MainScreen() {
                                     textColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                     onClick = { navController.navigate("voice/$selectedPerson") }
                                 )
+                                CircularButton(
+                                    text = "체조 영상",
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    textColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    onClick = { navController.navigate("exercise/$selectedPerson") }
+                                )
                             }
                         }
                     }
@@ -160,12 +164,15 @@ fun MainScreen() {
                         val person = backStackEntry.arguments?.getString("person") ?: selectedPerson!!
                         VoiceScreen(navController, person)
                     }
+                    composable("exercise/{person}") { backStackEntry ->
+                        val person = backStackEntry.arguments?.getString("person") ?: selectedPerson!!
+                        ExerciseScreen(navController, person)
+                    }
                 }
             }
         }
     }
 }
-
 
 @Composable
 fun CircularButton(
