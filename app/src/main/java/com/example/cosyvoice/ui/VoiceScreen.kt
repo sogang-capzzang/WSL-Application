@@ -151,7 +151,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                     viewModel.updateStatusMessage("TTS 데이터 수신 중... (${if (isFirst) "첫 번째" else "이어지는"} 데이터)")
                     if (isFirst && firstResponseTimestamp != null) {
                         val responseTime = firstResponseTimestamp - requestStartTime
-                        Log.d("VoiceScreen", "TTS 요청부터 첫 번째 응답까지 걸린 시간: $responseTime ms")
+                        Log.d("VoiceScreen", "test_gemini : $responseTime ms")
                     }
                     audioUtils.playPcmDataStream(pcmData, size, isFirst, firstResponseTimestamp)
                 } else if (hasReceivedData) {
@@ -171,7 +171,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
 
             override fun onBeginningOfSpeech() {
                 viewModel.updateStatusMessage("음성 인식 시작...")
-                startTime = System.currentTimeMillis()
                 Log.d("VoiceScreen", "음성 인식 시작: 음성 입력 감지됨")
             }
 
@@ -185,8 +184,8 @@ fun VoiceScreen(navController: NavHostController, person: String) {
 
             override fun onEndOfSpeech() {
                 viewModel.updateStatusMessage("음성 인식 종료...")
-                val endTime = System.currentTimeMillis()
-                val duration = endTime - startTime
+                startTime = System.currentTimeMillis()
+
                 Log.d("VoiceScreen", "음성 인식 걸린 시간 : $duration ms")
                 Log.d("VoiceScreen", "음성 인식 종료")
             }
@@ -212,6 +211,9 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 recognizedText = matches?.firstOrNull()
                 Log.d("VoiceScreen", "음성 인식 결과: $recognizedText")
+                val endTime = System.currentTimeMillis()
+                val duration = endTime - startTime
+                Log.d("VoiceScreen", "test_STT : $duration ms")
                 if (recognizedText != null) {
                     viewModel.updateStatusMessage("STT 완료: $recognizedText")
                     viewModel.callGeminiApi(recognizedText!!)

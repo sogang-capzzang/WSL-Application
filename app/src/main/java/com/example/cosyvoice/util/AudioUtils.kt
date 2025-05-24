@@ -71,7 +71,7 @@ class AudioUtils(private val context: Context) {
             val now = System.currentTimeMillis()
             val elapsed = initialReceiveTimestamp?.let{now-it}
             if(elapsed!=null){
-                Log.d("AudioUtils", "초기 버퍼 수신 완료 걸린 시간 : ${elapsed}ms")
+                Log.d("AudioUtils", "test_buffer : $elapsed ms")
             }
             if (audioTrack == null || isFirst) {
                 audioTrack?.release()
