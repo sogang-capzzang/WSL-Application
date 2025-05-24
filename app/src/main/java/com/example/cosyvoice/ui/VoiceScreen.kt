@@ -186,7 +186,6 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                 viewModel.updateStatusMessage("음성 인식 종료...")
                 startTime = System.currentTimeMillis()
 
-                Log.d("VoiceScreen", "음성 인식 걸린 시간 : $duration ms")
                 Log.d("VoiceScreen", "음성 인식 종료")
             }
 
