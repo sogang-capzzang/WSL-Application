@@ -459,7 +459,7 @@ class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
 
                 if (response != null) {
                     val endTime = System.currentTimeMillis()
-                    val requsetTime1 = startTime2 - endTime
+                    val requsetTime1 = endTime - startTime2
                     Log.d("VoiceScreen", "test_gemini : $requsetTime1 ms")
                     _statusMessage.value = "Gemini 응답: $response"
                     _geminiResponse.value = response
