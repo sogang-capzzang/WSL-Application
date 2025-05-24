@@ -151,7 +151,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                     viewModel.updateStatusMessage("TTS 데이터 수신 중... (${if (isFirst) "첫 번째" else "이어지는"} 데이터)")
                     if (isFirst && firstResponseTimestamp != null) {
                         val responseTime = firstResponseTimestamp - requestStartTime
-                        Log.d("VoiceScreen", "test_gemini : $responseTime ms")
+                        Log.d("VoiceScreen", "test_tts : $responseTime ms")
                     }
                     audioUtils.playPcmDataStream(pcmData, size, isFirst, firstResponseTimestamp)
                 } else if (hasReceivedData) {
@@ -163,6 +163,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
 
     DisposableEffect(Unit) {
         var startTime = 0L
+        var startTime2 = 0L
         val listener = object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 viewModel.updateStatusMessage("음성 인식 준비 완료...")
@@ -206,10 +207,14 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                 isRecording = false
             }
 
+
             override fun onResults(results: Bundle?) {
+
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 recognizedText = matches?.firstOrNull()
                 Log.d("VoiceScreen", "음성 인식 결과: $recognizedText")
+                val startTime2= System.currentTimeMillis()
+                viewModel.setStartTime2(startTime2)
                 val endTime = System.currentTimeMillis()
                 val duration = endTime - startTime
                 Log.d("VoiceScreen", "test_STT : $duration ms")
@@ -219,6 +224,9 @@ fun VoiceScreen(navController: NavHostController, person: String) {
                 }
                 isRecording = false
             }
+
+
+
 
             override fun onPartialResults(partialResults: Bundle?) {
                 val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
@@ -432,7 +440,10 @@ fun VoiceScreen(navController: NavHostController, person: String) {
 class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
     private val _statusMessage = MutableStateFlow("대기 중...")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
-
+    private var startTime2 = 0L
+    fun setStartTime2(time: Long) {
+        startTime2 = time
+    }
     private val _geminiResponse = MutableStateFlow<String?>(null)
     val geminiResponse: StateFlow<String?> = _geminiResponse.asStateFlow()
 
@@ -444,7 +455,12 @@ class VoiceScreenViewModel(private val coroutineScope: CoroutineScope) {
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val response = callGeminiApiInternal(userInput)
+
+
                 if (response != null) {
+                    val endTime = System.currentTimeMillis()
+                    val requsetTime1 = startTime2 - endTime
+                    Log.d("VoiceScreen", "test_gemini : $requsetTime1 ms")
                     _statusMessage.value = "Gemini 응답: $response"
                     _geminiResponse.value = response
                 } else {
