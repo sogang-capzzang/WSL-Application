@@ -11,6 +11,9 @@ class AudioUtils(private val context: Context) {
     private val initialBuffer = ByteArrayOutputStream()
     private val INITIAL_BUFFER_SIZE = 8192 * 2
 
+    private var initialReceiveTimestamp: Long? = null
+
+
     fun requestAudioFocus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
@@ -52,15 +55,24 @@ class AudioUtils(private val context: Context) {
             val sampleRate = 24000
             val channelConfig = AudioFormat.CHANNEL_OUT_MONO
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+            if(isFirst){
+                initialReceiveTimestamp = System.currentTimeMillis()
+                Log.d("AudioUtils" ,"초기 PCM 데이터 수신 시각 : $initialReceiveTimestamp")
+            }
 
             // Collect data in buffer
             initialBuffer.write(pcmData, 0, size)
+
             Log.d("AudioUtils", "Buffered: $size bytes, total: ${initialBuffer.size()} bytes")
 
             if (initialBuffer.size() < INITIAL_BUFFER_SIZE && !isFirst) {
                 return
             }
-
+            val now = System.currentTimeMillis()
+            val elapsed = initialReceiveTimestamp?.let{now-it}
+            if(elapsed!=null){
+                Log.d("AudioUtils", "초기 버퍼 수신 완료 걸린 시간 : ${elapsed}ms")
+            }
             if (audioTrack == null || isFirst) {
                 audioTrack?.release()
                 audioTrack = null

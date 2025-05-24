@@ -145,7 +145,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
             Log.d("VoiceScreen", "TTS 요청 시작: $requestStartTime")
 
             var hasReceivedData by mutableStateOf(false)
-            ttsClient.requestTTS(response, person) { pcmData, size, isFirst, firstResponseTimestamp ->
+            ttsClient.requestTTS("안녕하세요 어르신, 오늘도 활기찬 하루 보내세요. 오늘 저녁은 돈까스 제육 어떠세요?", person) { pcmData, size, isFirst, firstResponseTimestamp ->
                 if (size > 0) {
                     hasReceivedData = true
                     viewModel.updateStatusMessage("TTS 데이터 수신 중... (${if (isFirst) "첫 번째" else "이어지는"} 데이터)")
@@ -162,6 +162,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
     }
 
     DisposableEffect(Unit) {
+        var startTime = 0L
         val listener = object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 viewModel.updateStatusMessage("음성 인식 준비 완료...")
@@ -170,6 +171,7 @@ fun VoiceScreen(navController: NavHostController, person: String) {
 
             override fun onBeginningOfSpeech() {
                 viewModel.updateStatusMessage("음성 인식 시작...")
+                startTime = System.currentTimeMillis()
                 Log.d("VoiceScreen", "음성 인식 시작: 음성 입력 감지됨")
             }
 
@@ -183,6 +185,9 @@ fun VoiceScreen(navController: NavHostController, person: String) {
 
             override fun onEndOfSpeech() {
                 viewModel.updateStatusMessage("음성 인식 종료...")
+                val endTime = System.currentTimeMillis()
+                val duration = endTime - startTime
+                Log.d("VoiceScreen", "음성 인식 걸린 시간 : $duration ms")
                 Log.d("VoiceScreen", "음성 인식 종료")
             }
 
