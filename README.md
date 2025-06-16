@@ -30,6 +30,6 @@ sdk.dir=/path/to/android-sdk
 
 ```
 gemini.api.key=your-api-key
-cosyvoice2.server.url=http://123.45.67.89:54321/inference_zero_shot
+cosyvoice2.server.url=http://123.45.67.89:54321/inference_zero_shot_use_cache
 ```
 
